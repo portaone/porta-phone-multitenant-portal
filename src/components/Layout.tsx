@@ -1,5 +1,6 @@
 import {Outlet} from 'react-router-dom';
 import Header from './Header';
+import DialerWidget from './dashboard/DialerWidget';
 
 function Layout() {
     return (
@@ -12,6 +13,7 @@ function Layout() {
                     </div>
                 </main>
             </div>
+            <DialerWidget/>
         </div>
     );
 }
