@@ -17,18 +17,31 @@ const api = axios.create({
     timeout: 20000
 });
 
+const PUBLIC_AUTH_PATHS = ['token', 'tenants/login', 'tenants/pwd_reset', 'signup'];
+
+const isPublicAuthRequest = (url?: string) => {
+    if (!url) return false;
+    const path = url.split('?')[0].replace(/^\/+/, '').replace(/\/+$/, '');
+    return PUBLIC_AUTH_PATHS.some((publicPath) => path === publicPath || path.startsWith(`${publicPath}/`));
+};
+
 let sessionExpiredNotified = false;
+
+const handleSessionExpired = () => {
+    if (sessionExpiredNotified) return;
+    sessionExpiredNotified = true;
+    toast.error('Session expired. Please log in again.', {toastId: 'session-expired'});
+    useAuthStore.getState().clearAuth();
+    // reset flag after a tick so next login cycle works
+    setTimeout(() => { sessionExpiredNotified = false; }, 0);
+};
 
 api.interceptors.request.use((config) => {
     const token = useAuthStore.getState().token;
 
     if (token) {
-        if (isTokenExpired(token) && !sessionExpiredNotified) {
-            sessionExpiredNotified = true;
-            toast.error('Session expired. Please log in again.');
-            useAuthStore.getState().clearAuth();
-            // reset flag after a tick so next login cycle works
-            setTimeout(() => { sessionExpiredNotified = false; }, 0);
+        if (isTokenExpired(token)) {
+            handleSessionExpired();
         }
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -42,7 +55,15 @@ api.interceptors.response.use(
         const status = error.response?.status;
 
         if (status === 401) {
-            useAuthStore.getState().clearAuth();
+            if (!isPublicAuthRequest(error.config?.url)) {
+                const token = useAuthStore.getState().token;
+
+                if (!token || isTokenExpired(token)) {
+                    handleSessionExpired();
+                } else {
+                    toast.error('You are not authorized to perform this action.', {toastId: 'unauthorized-request'});
+                }
+            }
         } else if (status === 404) {
             toast.error('The requested resource was not found.');
         } else if (typeof status === 'number' && status >= 500) {
